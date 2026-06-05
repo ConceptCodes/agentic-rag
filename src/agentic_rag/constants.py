@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 COMPANY_DOCS_DIR = DATA_DIR / "company_docs"
@@ -28,4 +27,3 @@ HOTPOT_DATASET_CONFIG = "distractor"
 HOTPOT_DATASET_SPLIT = "validation"
 
 ANSWER_CITATION_PATTERN = "[source: doc_id/chunk_id]"
-

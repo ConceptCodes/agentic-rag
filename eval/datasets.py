@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-import requests
+import httpx
 
-from src.constants import (
+from agentic_rag.constants import (
     EVAL_DATA_DIR,
     HOTPOT_DATASET_CONFIG,
     HOTPOT_DATASET_NAME,
@@ -22,14 +22,14 @@ def _cache_path() -> Path:
 
 def _download_hotpotqa_rows(limit: int) -> list[dict[str, Any]]:
     url = "https://datasets-server.huggingface.co/rows"
-    params = {
+    params: dict[str, str | int] = {
         "dataset": HOTPOT_DATASET_NAME,
         "config": HOTPOT_DATASET_CONFIG,
         "split": HOTPOT_DATASET_SPLIT,
         "offset": 0,
         "length": max(1, limit),
     }
-    resp = requests.get(url, params=params, timeout=30)
+    resp = httpx.get(url, params=params, timeout=30)
     resp.raise_for_status()
     payload = resp.json()
     rows = payload.get("rows", [])

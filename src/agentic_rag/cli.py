@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import sys
 
+from agentic_rag.agent import invoke_agent
+from agentic_rag.constants import DEFAULT_CHAT_MODEL, DEFAULT_EVAL_SAMPLES
+from agentic_rag.ingest import index_documents
 from eval.datasets import fetch_hotpotqa_subset
-from src.agent import invoke_agent
-from src.constants import DEFAULT_CHAT_MODEL, DEFAULT_EVAL_SAMPLES
-from src.ingest import index_documents
+
+logger = logging.getLogger(__name__)
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
+    """Ingest markdown documents into the chunk index."""
     stats = index_documents(embedding_backend=args.embedding_backend)
     print(json.dumps({"status": "ok", **stats}, indent=2))
     return 0
 
 
 def cmd_ask(args: argparse.Namespace) -> int:
+    """Ask the retrieval agent a question and print the answer."""
     result = invoke_agent(
         question=args.question,
         thread_id=args.thread_id,
@@ -37,25 +43,30 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
+    """Run a contain-match evaluation against a HotpotQA subset."""
     samples = fetch_hotpotqa_subset(limit=args.samples)
     score = 0
     for i, item in enumerate(samples, start=1):
         question = item.get("question", "")
         expected = str(item.get("answer", "")).strip().lower()
-        result = invoke_agent(
-            question=question,
-            thread_id=f"eval-{i}",
-            model_name=args.model,
-            embedding_backend=args.embedding_backend,
-            top_k=args.top_k,
-            max_steps=args.max_steps,
-        )
-        got = result.answer.lower()
-        hit = bool(expected and expected in got)
-        score += int(hit)
+        try:
+            result = invoke_agent(
+                question=question,
+                thread_id=f"eval-{i}",
+                model_name=args.model,
+                embedding_backend=args.embedding_backend,
+                top_k=args.top_k,
+                max_steps=args.max_steps,
+            )
+            got = result.answer.lower()
+            hit = bool(expected and expected in got)
+            score += int(hit)
+        except Exception:
+            logger.exception("Evaluation sample %d failed", i)
+            hit = False
         print(f"[{i}/{len(samples)}] hit={hit} question={question[:80]!r}")
 
-    summary = {
+    summary: dict[str, object] = {
         "samples": len(samples),
         "contain_match_accuracy": (score / len(samples)) if samples else 0,
         "hits": score,
@@ -65,6 +76,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser with subcommands."""
     parser = argparse.ArgumentParser(description="Agentic RAG CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -106,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Entry point for the Agentic RAG CLI."""
+    logging.basicConfig(
+        level=logging.WARNING,
+        stream=sys.stderr,
+        format="%(levelname)s %(name)s %(message)s",
+    )
     parser = build_parser()
     args = parser.parse_args()
     raise SystemExit(args.func(args))

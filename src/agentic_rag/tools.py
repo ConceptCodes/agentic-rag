@@ -6,8 +6,13 @@ from typing import Any
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
-from src.constants import DEFAULT_TOP_K
-from src.utils import get_chroma_client, get_embedding_adapter, load_chunk_map, load_chunk_records
+from agentic_rag.constants import DEFAULT_TOP_K
+from agentic_rag.utils import (
+    get_chroma_client,
+    get_embedding_adapter,
+    load_chunk_map,
+    load_chunk_records,
+)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -24,6 +29,8 @@ def _snippet(text: str, query: str, max_chars: int = 220) -> str:
 
 
 class KeywordSearchInput(BaseModel):
+    """Input schema for keyword-based chunk retrieval."""
+
     query: str = Field(description="Lexical query string with specific entities or terms")
     top_k: int = Field(default=DEFAULT_TOP_K, ge=1, le=20)
 
@@ -60,6 +67,8 @@ def keyword_search(query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
 
 
 class SemanticSearchInput(BaseModel):
+    """Input schema for semantic vector-based chunk retrieval."""
+
     query: str = Field(description="Semantic query string describing concepts or intent")
     top_k: int = Field(default=DEFAULT_TOP_K, ge=1, le=20)
 
@@ -83,7 +92,7 @@ def semantic_search(query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
     metas = response.get("metadatas", [[]])[0]
     distances = response.get("distances", [[]])[0]
     results = []
-    for chunk_id, text, meta, distance in zip(ids, docs, metas, distances):
+    for chunk_id, text, meta, distance in zip(ids, docs, metas, distances, strict=True):
         source = str((meta or {}).get("source", "unknown"))
         results.append(
             {
@@ -100,8 +109,12 @@ def semantic_search(query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
 
 
 class ChunkReadInput(BaseModel):
+    """Input schema for reading full chunk content by ID."""
+
     chunk_ids: list[str] = Field(description="Chunk IDs to read in full")
-    include_adjacent: bool = Field(default=False, description="Include previous and next chunks if present")
+    include_adjacent: bool = Field(
+        default=False, description="Include previous and next chunks if present"
+    )
 
 
 @tool("chunk_read", args_schema=ChunkReadInput)

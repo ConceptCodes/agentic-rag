@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from src.constants import ANSWER_CITATION_PATTERN
-
+from agentic_rag.constants import ANSWER_CITATION_PATTERN
 
 SYSTEM_PROMPT = f"""
 You are an A-RAG style retrieval agent.
@@ -18,8 +17,3 @@ Answer policy:
 3) If evidence is insufficient, say you are uncertain and ask for clarification.
 4) Never invent sources.
 """.strip()
-
-
-def build_system_prompt() -> str:
-	return SYSTEM_PROMPT
-

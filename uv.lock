@@ -18,6 +18,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "pydantic" },
+    { name = "rich" },
     { name = "sentence-transformers" },
     { name = "tiktoken" },
 ]
@@ -38,6 +39,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.2.2" },
     { name = "langgraph", specifier = ">=1.2.4" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "rich", specifier = ">=13.9.0" },
     { name = "sentence-transformers", specifier = ">=5.5.1" },
     { name = "tiktoken", specifier = ">=0.13.0" },
 ]

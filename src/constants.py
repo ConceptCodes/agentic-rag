@@ -12,7 +12,7 @@ CHROMA_DIR = INDEX_DIR / "chroma"
 CHUNKS_PATH = INDEX_DIR / "chunks.jsonl"
 
 LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
-DEFAULT_CHAT_MODEL = "openai/gpt-oss-20b"
+DEFAULT_CHAT_MODEL = "google/gemma-4-e4b"
 DEFAULT_EMBEDDING_BACKEND = "sentence_transformers"
 DEFAULT_EMBEDDING_MODEL_SENTENCE_TRANSFORMERS = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_EMBEDDING_MODEL_LMSTUDIO = "gemmaembedding-370m"

@@ -5,7 +5,7 @@ import json
 
 from eval.datasets import fetch_hotpotqa_subset
 from src.agent import invoke_agent
-from src.constants import DEFAULT_EVAL_SAMPLES
+from src.constants import DEFAULT_CHAT_MODEL, DEFAULT_EVAL_SAMPLES
 from src.ingest import index_documents
 
 
@@ -69,23 +69,35 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     ingest_p = sub.add_parser("ingest", help="Ingest markdown docs into chunk index")
-    ingest_p.add_argument("--embedding-backend", default="sentence_transformers", choices=["sentence_transformers", "lmstudio"])
+    ingest_p.add_argument(
+        "--embedding-backend",
+        default="sentence_transformers",
+        choices=["sentence_transformers", "lmstudio"],
+    )
     ingest_p.set_defaults(func=cmd_ingest)
 
     ask_p = sub.add_parser("ask", help="Ask the retrieval agent a question")
     ask_p.add_argument("question")
     ask_p.add_argument("--thread-id", default="local-thread")
     ask_p.add_argument("--user-id", default=None)
-    ask_p.add_argument("--model", default="openai/gpt-oss-20b")
-    ask_p.add_argument("--embedding-backend", default="sentence_transformers", choices=["sentence_transformers", "lmstudio"])
+    ask_p.add_argument("--model", default=DEFAULT_CHAT_MODEL)
+    ask_p.add_argument(
+        "--embedding-backend",
+        default="sentence_transformers",
+        choices=["sentence_transformers", "lmstudio"],
+    )
     ask_p.add_argument("--top-k", type=int, default=5)
     ask_p.add_argument("--max-steps", type=int, default=12)
     ask_p.set_defaults(func=cmd_ask)
 
     eval_p = sub.add_parser("eval", help="Run lightweight HotpotQA subset evaluation")
     eval_p.add_argument("--samples", type=int, default=DEFAULT_EVAL_SAMPLES)
-    eval_p.add_argument("--model", default="openai/gpt-oss-20b")
-    eval_p.add_argument("--embedding-backend", default="sentence_transformers", choices=["sentence_transformers", "lmstudio"])
+    eval_p.add_argument("--model", default=DEFAULT_CHAT_MODEL)
+    eval_p.add_argument(
+        "--embedding-backend",
+        default="sentence_transformers",
+        choices=["sentence_transformers", "lmstudio"],
+    )
     eval_p.add_argument("--top-k", type=int, default=5)
     eval_p.add_argument("--max-steps", type=int, default=12)
     eval_p.set_defaults(func=cmd_eval)

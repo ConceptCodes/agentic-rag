@@ -8,6 +8,7 @@ import sys
 from agentic_rag.agent import invoke_agent
 from agentic_rag.constants import DEFAULT_CHAT_MODEL, DEFAULT_EVAL_SAMPLES
 from agentic_rag.ingest import index_documents
+from agentic_rag.showcase import render_agent_run
 from eval.datasets import fetch_hotpotqa_subset
 
 logger = logging.getLogger(__name__)
@@ -31,14 +32,22 @@ def cmd_ask(args: argparse.Namespace) -> int:
         max_steps=args.max_steps,
         user_id=args.user_id,
     )
-    print("Answer:\n")
-    print(result.answer)
-    print("\nCitations:")
-    if not result.citations:
-        print("- none")
+    if args.showcase:
+        render_agent_run(
+            question=args.question,
+            result_raw=result.raw,
+            thread_id=args.thread_id,
+            model_name=args.model,
+        )
     else:
-        for c in result.citations:
-            print(f"- {c}")
+        print("Answer:\n")
+        print(result.answer)
+        print("\nCitations:")
+        if not result.citations:
+            print("- none")
+        else:
+            for c in result.citations:
+                print(f"- {c}")
     return 0
 
 
@@ -100,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ask_p.add_argument("--top-k", type=int, default=5)
     ask_p.add_argument("--max-steps", type=int, default=12)
+    ask_p.add_argument(
+        "--showcase",
+        action="store_true",
+        help="Show a detailed step-by-step trace of the agent's execution",
+    )
     ask_p.set_defaults(func=cmd_ask)
 
     eval_p = sub.add_parser("eval", help="Run lightweight HotpotQA subset evaluation")

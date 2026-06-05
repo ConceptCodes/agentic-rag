@@ -12,3 +12,9 @@ wheels/
 
 # Agent-specific files
 .agents/*
+
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+data/index

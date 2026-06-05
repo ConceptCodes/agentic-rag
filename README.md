@@ -27,14 +27,14 @@ Each citation should map to evidence returned by retrieval tools.
 
 ## Project Layout
 
-- [main.py](main.py): CLI (`ingest`, `ask`, `eval`)
-- [src/constants.py](src/constants.py): defaults and paths
-- [src/state.py](src/state.py): state/context contracts
-- [src/ingest.py](src/ingest.py): markdown ingestion and indexing
-- [src/tools.py](src/tools.py): retrieval tools
-- [src/agent.py](src/agent.py): agent harness creation and invocation
-- [src/prompts.py](src/prompts.py): system prompt + citation policy
-- [src/utils.py](src/utils.py): embeddings, Chroma, dataset helpers
+- [main.py](https://github.com/ConceptCodes/agentic-rag/blob/main/main.py): CLI (`ingest`, `ask`, `eval`)
+- [src/constants.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/constants.py): defaults and paths
+- [src/state.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/state.py): state/context contracts
+- [src/ingest.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/ingest.py): markdown ingestion and indexing
+- [src/tools.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/tools.py): retrieval tools
+- [src/agent.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/agent.py): agent harness creation and invocation
+- [src/prompts.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/prompts.py): system prompt + citation policy
+- [src/utils.py](https://github.com/ConceptCodes/agentic-rag/blob/main/src/utils.py): embeddings, Chroma, dataset helpers
 
 ## Setup
 

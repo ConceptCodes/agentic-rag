@@ -6,12 +6,11 @@ from typing import Any
 
 import httpx
 
-from agentic_rag.constants import (
-    EVAL_DATA_DIR,
-    HOTPOT_DATASET_CONFIG,
-    HOTPOT_DATASET_NAME,
-    HOTPOT_DATASET_SPLIT,
-)
+from agentic_rag.constants import EVAL_DATA_DIR
+
+HOTPOT_DATASET_NAME = "hotpot_qa"
+HOTPOT_DATASET_CONFIG = "distractor"
+HOTPOT_DATASET_SPLIT = "validation"
 
 
 def _cache_path() -> Path:

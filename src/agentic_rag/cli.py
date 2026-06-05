@@ -6,10 +6,15 @@ import logging
 import sys
 
 from agentic_rag.agent import invoke_agent
-from agentic_rag.constants import DEFAULT_CHAT_MODEL, DEFAULT_EVAL_SAMPLES
+from agentic_rag.constants import (
+    DEFAULT_CHAT_PROVIDER,
+    DEFAULT_EMBEDDING_BACKEND,
+    DEFAULT_MAX_AGENT_STEPS,
+)
 from agentic_rag.ingest import index_documents
 from agentic_rag.showcase import render_agent_run
 from eval.datasets import fetch_hotpotqa_subset
+from eval.harness import DEFAULT_EVAL_SAMPLES, parse_eval_sample, run_eval
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +32,9 @@ def cmd_ask(args: argparse.Namespace) -> int:
         question=args.question,
         thread_id=args.thread_id,
         model_name=args.model,
-        embedding_backend=args.embedding_backend,
-        top_k=args.top_k,
+        chat_provider=args.chat_provider,
+        reasoning_enabled=args.reasoning,
+        reasoning_effort=args.reasoning_effort,
         max_steps=args.max_steps,
         user_id=args.user_id,
     )
@@ -37,7 +43,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
             question=args.question,
             result_raw=result.raw,
             thread_id=args.thread_id,
-            model_name=args.model,
+            model_name=args.model or "default",
         )
     else:
         print("Answer:\n")
@@ -53,34 +59,28 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 def cmd_eval(args: argparse.Namespace) -> int:
     """Run a contain-match evaluation against a HotpotQA subset."""
-    samples = fetch_hotpotqa_subset(limit=args.samples)
-    score = 0
-    for i, item in enumerate(samples, start=1):
-        question = item.get("question", "")
-        expected = str(item.get("answer", "")).strip().lower()
-        try:
-            result = invoke_agent(
-                question=question,
-                thread_id=f"eval-{i}",
-                model_name=args.model,
-                embedding_backend=args.embedding_backend,
-                top_k=args.top_k,
-                max_steps=args.max_steps,
-            )
-            got = result.answer.lower()
-            hit = bool(expected and expected in got)
-            score += int(hit)
-        except Exception:
-            logger.exception("Evaluation sample %d failed", i)
-            hit = False
-        print(f"[{i}/{len(samples)}] hit={hit} question={question[:80]!r}")
+    rows = fetch_hotpotqa_subset(limit=args.samples)
+    samples = [parse_eval_sample(row) for row in rows]
 
-    summary: dict[str, object] = {
-        "samples": len(samples),
-        "contain_match_accuracy": (score / len(samples)) if samples else 0,
-        "hits": score,
-    }
-    print("\n" + json.dumps(summary, indent=2))
+    def ask_agent(question: str, thread_id: str) -> str:
+        return invoke_agent(
+            question=question,
+            thread_id=thread_id,
+            model_name=args.model,
+            chat_provider=args.chat_provider,
+            reasoning_enabled=args.reasoning,
+            reasoning_effort=args.reasoning_effort,
+            max_steps=args.max_steps,
+        ).answer
+
+    report = run_eval(samples, ask_agent, logger=logger)
+    for result in report.results:
+        print(
+            f"[{result.index}/{report.samples}] hit={result.hit} "
+            f"question={result.sample.question[:80]!r}"
+        )
+
+    print("\n" + json.dumps(report.summary(), indent=2))
     return 0
 
 
@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_p = sub.add_parser("ingest", help="Ingest markdown docs into chunk index")
     ingest_p.add_argument(
         "--embedding-backend",
-        default="sentence_transformers",
+        default=DEFAULT_EMBEDDING_BACKEND,
         choices=["sentence_transformers", "lmstudio"],
     )
     ingest_p.set_defaults(func=cmd_ingest)
@@ -101,14 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
     ask_p.add_argument("question")
     ask_p.add_argument("--thread-id", default="local-thread")
     ask_p.add_argument("--user-id", default=None)
-    ask_p.add_argument("--model", default=DEFAULT_CHAT_MODEL)
-    ask_p.add_argument(
-        "--embedding-backend",
-        default="sentence_transformers",
-        choices=["sentence_transformers", "lmstudio"],
-    )
-    ask_p.add_argument("--top-k", type=int, default=5)
-    ask_p.add_argument("--max-steps", type=int, default=12)
+    _add_chat_model_args(ask_p)
+    ask_p.add_argument("--max-steps", type=int, default=DEFAULT_MAX_AGENT_STEPS)
     ask_p.add_argument(
         "--showcase",
         action="store_true",
@@ -118,17 +112,40 @@ def build_parser() -> argparse.ArgumentParser:
 
     eval_p = sub.add_parser("eval", help="Run lightweight HotpotQA subset evaluation")
     eval_p.add_argument("--samples", type=int, default=DEFAULT_EVAL_SAMPLES)
-    eval_p.add_argument("--model", default=DEFAULT_CHAT_MODEL)
-    eval_p.add_argument(
-        "--embedding-backend",
-        default="sentence_transformers",
-        choices=["sentence_transformers", "lmstudio"],
-    )
-    eval_p.add_argument("--top-k", type=int, default=5)
-    eval_p.add_argument("--max-steps", type=int, default=12)
+    _add_chat_model_args(eval_p)
+    eval_p.add_argument("--max-steps", type=int, default=DEFAULT_MAX_AGENT_STEPS)
     eval_p.set_defaults(func=cmd_eval)
 
     return parser
+
+
+def _add_chat_model_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--chat-provider",
+        default=DEFAULT_CHAT_PROVIDER,
+        choices=["lmstudio", "openrouter"],
+        help="Chat model provider to use",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "Model name or alias. Aliases: deepseek-v4-pro, gpt-5-mini, lmstudio. "
+            "Defaults depend on --chat-provider."
+        ),
+    )
+    parser.add_argument(
+        "--reasoning",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable OpenRouter reasoning for models that support it",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=["low", "medium", "high", "xhigh"],
+        default=None,
+        help="Optional OpenRouter reasoning effort",
+    )
 
 
 def main() -> None:

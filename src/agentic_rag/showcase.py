@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import ast
-import json
-import re
 from typing import Any
 
 from rich import box
@@ -12,90 +9,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-
-def _get_content(msg: Any) -> str:
-    content = getattr(msg, "content", "") or ""
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-            elif isinstance(block, str):
-                parts.append(block)
-        return " ".join(parts)
-    return str(content)
-
-
-def _parse_tool_result(content: str) -> dict[str, Any] | None:
-    for parser in (json.loads, ast.literal_eval):
-        try:
-            result = parser(content)
-            if isinstance(result, dict):
-                return result
-        except (ValueError, SyntaxError, TypeError):
-            continue
-    return None
-
-
-def _parse_tool_calls(msg: Any) -> list[dict[str, Any]]:
-    calls: list[dict[str, Any]] = []
-    raw = getattr(msg, "tool_calls", None)
-    if not raw:
-        raw = getattr(msg, "additional_kwargs", {}).get("tool_calls", [])
-    for tc in raw:
-        if isinstance(tc, dict):
-            name = tc.get("name", "")
-            args_raw = tc.get("args", {})
-            id_ = tc.get("id", "")
-            if not name:
-                fn = tc.get("function", {})
-                name = fn.get("name", "unknown")
-                args_str = fn.get("arguments", "{}")
-                try:
-                    args_raw = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except (json.JSONDecodeError, TypeError):
-                    args_raw = {"raw": args_str}
-            if isinstance(args_raw, str):
-                try:
-                    args_raw = json.loads(args_raw)
-                except (json.JSONDecodeError, TypeError):
-                    args_raw = {"raw": args_raw}
-            calls.append({"name": name, "args": args_raw, "id": id_})
-    return calls
-
-
-def _parse_messages(messages: list[Any]) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = []
-    i = 0
-    while i < len(messages) and getattr(messages[i], "type", "") in ("system", "human"):
-        i += 1
-    while i < len(messages):
-        msg = messages[i]
-        if getattr(msg, "type", "") == "ai":
-            tool_calls = _parse_tool_calls(msg)
-            if tool_calls:
-                results = []
-                j = i + 1
-                while j < len(messages) and getattr(messages[j], "type", "") == "tool":
-                    results.append(messages[j])
-                    j += 1
-                steps.append(
-                    {
-                        "type": "tool_call",
-                        "thought": _get_content(msg),
-                        "tool_calls": tool_calls,
-                        "tool_results": results,
-                    }
-                )
-                i = j
-            else:
-                content = _get_content(msg)
-                is_last = not any(getattr(m, "type", "") == "ai" for m in messages[i + 1 :])
-                steps.append({"type": "final" if is_last else "thought", "content": content})
-                i += 1
-        else:
-            i += 1
-    return steps
+from agentic_rag.trace import FinalStep, ThoughtStep, ToolCallStep, parse_agent_trace
 
 
 def _render_args(args: dict[str, Any]) -> str:
@@ -174,15 +88,14 @@ def render_agent_run(
     tool calls, tool results) and prints them with styled panels, tables, and rules.
     """
     console = Console()
-    messages = result_raw.get("messages", [])
+    steps = parse_agent_trace(result_raw)
 
-    if not messages:
+    if not steps:
         console.print("[red]No agent output to show.[/red]")
         return
 
-    steps = _parse_messages(messages)
-    tool_steps = [s for s in steps if s["type"] == "tool_call"]
-    total_calls = sum(len(s["tool_calls"]) for s in tool_steps)
+    tool_steps = [step for step in steps if isinstance(step, ToolCallStep)]
+    total_calls = sum(len(step.tool_calls) for step in tool_steps)
 
     console.print()
     header = Group(
@@ -204,26 +117,25 @@ def render_agent_run(
 
     step_num = 0
     for step in steps:
-        if step["type"] == "tool_call":
+        if isinstance(step, ToolCallStep):
             step_num += 1
-            tc = len(step["tool_calls"])
+            tc = len(step.tool_calls)
             label = f"  Step {step_num} \u00b7 {tc} tool call{'s' if tc != 1 else ''}  "
             console.print(Rule(Text(label, style="bold yellow")))
             console.print()
 
-            if step["thought"]:
-                console.print(Text(step["thought"], style="cyan italic"))
+            if step.thought:
+                console.print(Text(step.thought, style="cyan italic"))
                 console.print()
 
-            for tcall in step["tool_calls"]:
-                console.print(_render_tool_input(tcall["name"], tcall["args"]))
+            for tool_call in step.tool_calls:
+                console.print(_render_tool_input(tool_call.name, tool_call.args))
 
-            for tr in step["tool_results"]:
-                content = _get_content(tr)
-                parsed = _parse_tool_result(content)
-                if parsed:
+            for tool_result in step.tool_results:
+                if tool_result.parsed:
+                    parsed = tool_result.parsed
                     results = parsed.get("results", [])
-                    tool_name = parsed.get("tool", getattr(tr, "name", "tool"))
+                    tool_name = parsed.get("tool", tool_result.name)
                     if tool_name in ("keyword_search", "semantic_search"):
                         if results:
                             console.print(
@@ -245,34 +157,38 @@ def render_agent_run(
                             )
                     elif tool_name == "chunk_read":
                         chunks = _render_chunk_panels(results)
-                        for c in chunks:
-                            console.print(c)
+                        for chunk_panel in chunks:
+                            console.print(chunk_panel)
                     else:
-                        text = content[:300] + ("..." if len(content) > 300 else "")
+                        text = tool_result.content[:300] + (
+                            "..." if len(tool_result.content) > 300 else ""
+                        )
                         console.print(Panel(text, border_style="green", box=box.SIMPLE))
                 else:
-                    text = content[:300] + ("..." if len(content) > 300 else "")
+                    text = tool_result.content[:300] + (
+                        "..." if len(tool_result.content) > 300 else ""
+                    )
                     console.print(Panel(text, border_style="green", box=box.SIMPLE))
                 console.print()
 
-        elif step["type"] == "thought":
+        elif isinstance(step, ThoughtStep):
             console.print(Rule(Text("  Intermediate thought  ", style="dim")))
             console.print()
-            console.print(Text(step["content"], style="cyan italic"))
+            console.print(Text(step.content, style="cyan italic"))
             console.print()
 
-    final_steps = [s for s in steps if s["type"] == "final"]
+    final_steps = [step for step in steps if isinstance(step, FinalStep)]
     if final_steps:
         console.print()
-        answer_text = final_steps[0]["content"]
-        citations = sorted(set(re.findall(r"\[source:\s*[\w./\-]+/[\w.\-:]+\]", answer_text)))
+        answer_text = final_steps[0].content
+        citations = final_steps[0].citations
 
         parts: list[Text] = [Text(answer_text)]
         if citations:
             parts.append(Text(""))
             parts.append(Text("Citations:", style="bold underline"))
-            for c in citations:
-                parts.append(Text(f"  \u2022 {c}"))
+            for citation in citations:
+                parts.append(Text(f"  \u2022 {citation}"))
 
         console.print(
             Panel(

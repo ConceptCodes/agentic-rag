@@ -5,17 +5,11 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import tiktoken
 
 from agentic_rag.constants import COMPANY_DOCS_DIR, DEFAULT_CHUNK_MAX_TOKENS
-from agentic_rag.utils import (
-    ChunkRecord,
-    get_chroma_client,
-    get_embedding_adapter,
-    save_chunk_records,
-)
+from agentic_rag.corpus import ChunkRecord, index_chunk_records
 
 logger = logging.getLogger(__name__)
 
@@ -162,36 +156,6 @@ def index_documents(embedding_backend: str | None = None) -> dict[str, int]:
     """Load, chunk, and index all markdown documents into Chroma and JSONL."""
     docs = load_markdown_documents()
     chunks = build_chunks(docs)
-    save_chunk_records(chunks)
-
-    config: Any = (
-        {"configurable": {"embedding_backend": embedding_backend}} if embedding_backend else None
-    )
-    adapter = get_embedding_adapter(config)
-    vectors = adapter.embed_documents([c.text for c in chunks]) if chunks else []
-
-    client = get_chroma_client()
-    collection = client.get_or_create_collection("agentic_rag_chunks")
-    if chunks:
-        # Replace collection contents in a simple way for deterministic local iteration.
-        existing = collection.get(include=[])
-        existing_ids = existing.get("ids", [])
-        if existing_ids:
-            collection.delete(ids=existing_ids)
-
-        collection.add(
-            ids=[c.chunk_id for c in chunks],
-            documents=[c.text for c in chunks],
-            embeddings=vectors,
-            metadatas=[
-                {
-                    "doc_id": c.doc_id,
-                    "source": c.source,
-                    "title": c.title,
-                    "position": c.position,
-                }
-                for c in chunks
-            ],
-        )
+    index_chunk_records(chunks, embedding_backend=embedding_backend)
 
     return {"documents": len(docs), "chunks": len(chunks)}
